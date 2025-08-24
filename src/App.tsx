@@ -1,12 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target } from 'lucide-react';
+import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain } from 'lucide-react';
 import InputForm from './components/InputForm';
 import GoalsForm from './components/GoalsForm';
+import MLDashboard from './components/MLDashboard';
 import FinancialMetrics from './components/FinancialMetrics';
 import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
 import CarbonReductionChart from './components/CarbonReductionChart';
 import ElectricityPricePrediction from './components/ElectricityPricePrediction';
+import { mlCalculator } from './utils/mlEnhancedCalculations';
 import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
 import { exportToPDF } from './utils/pdfExport';
 import { SystemParameters, FinancialParameters, CalculatedResults } from './types';
@@ -43,21 +45,54 @@ function App() {
   const carbonReductionChartRef = useRef<HTMLCanvasElement>(null);
 
   const calculateResults = () => {
-    const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
-    const energyGeneration = calculateEnergyGeneration(systemParams);
-    const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
+    // Use ML-enhanced calculations
+    mlCalculator.calculateWithMLValidation(systemParams, financialParams)
+      .then(mlResults => {
+        if (mlResults.success) {
+          setResults({
+            ...mlResults.data,
+            electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
+              year: i + 1,
+              price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
+            }))
+          });
+          setActiveTab('financial');
+        } else {
+          // Fallback to conventional calculations
+          const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
+          const energyGeneration = calculateEnergyGeneration(systemParams);
+          const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
 
-    setResults({
-      financialMetrics,
-      energyGeneration,
-      carbonReduction,
-      electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
-        year: i + 1,
-        price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
-      }))
-    });
+          setResults({
+            financialMetrics,
+            energyGeneration,
+            carbonReduction,
+            electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
+              year: i + 1,
+              price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
+            }))
+          });
+          setActiveTab('financial');
+        }
+      })
+      .catch(error => {
+        console.error('ML calculation failed, using fallback:', error);
+        // Fallback to conventional calculations
+        const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
+        const energyGeneration = calculateEnergyGeneration(systemParams);
+        const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
 
-    setActiveTab('financial');
+        setResults({
+          financialMetrics,
+          energyGeneration,
+          carbonReduction,
+          electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
+            year: i + 1,
+            price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
+          }))
+        });
+        setActiveTab('financial');
+      });
   };
 
   const handleExportPDF = () => {
@@ -79,6 +114,14 @@ function App() {
       systemSize,
       installationCost: systemSize * prev.costPerKw
     }));
+  };
+  const handleMLResultsUpdate = (mlResults: any) => {
+    if (mlResults.optimizedParams) {
+      setSystemParams(prev => ({ ...prev, ...mlResults.optimizedParams }));
+    }
+    if (mlResults.financialMetrics) {
+      setResults(prev => prev ? { ...prev, ...mlResults } : null);
+    }
   };
 
   return (
@@ -113,6 +156,15 @@ function App() {
             >
               <Target className="h-4 w-4 mr-2" />
               Set Goals
+            </button>
+            <button
+              className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
+                activeTab === 'ml' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('ml')}
+            >
+              <Brain className="h-4 w-4 mr-2" />
+              ML Analysis
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
@@ -178,6 +230,13 @@ function App() {
           <div className="p-6">
             {activeTab === 'goals' && (
               <GoalsForm onCalculate={handleGoalsCalculation} />
+            )}
+            {activeTab === 'ml' && (
+              <MLDashboard 
+                systemParams={systemParams}
+                financialParams={financialParams}
+                onResultsUpdate={handleMLResultsUpdate}
+              />
             )}
             {activeTab === 'input' && (
               <InputForm

@@ -1,14 +1,45 @@
-export interface SystemParameters {
+export type EnergySourceType = 'solar' | 'wind' | 'hydro' | 'wave';
+
+export interface EnergySourceConfig {
+  type: EnergySourceType;
+  enabled: boolean;
   capacity: number; // kW
   efficiency: number; // %
-  gridEmissionFactor: number; // kg CO₂/kWh
-  operationalLifetime: number; // years
   costPerKw: number; // R
-  systemSize: number; // kW
-  installationCost: number; // R
   dailyProductionHours: number; // hours
   degradationRate: number; // % per year
-  operationalCosts: number; // R per year
+  specificOperationalCosts: number; // R per year per kW
+}
+
+export interface WeatherData {
+  timestamp: Date;
+  temperature: number; // °C
+  humidity: number; // %
+  windSpeed: number; // m/s
+  windDirection: number; // degrees
+  solarIrradiance: number; // W/m²
+  cloudCover: number; // %
+  precipitation: number; // mm
+  waveHeight?: number; // m (for wave energy)
+  waterFlow?: number; // m³/s (for hydro)
+  pressure: number; // hPa
+}
+
+export interface SystemParameters {
+  energySources: EnergySourceConfig[];
+  totalCapacity: number; // kW (calculated)
+  averageEfficiency: number; // % (calculated)
+  gridEmissionFactor: number; // kg CO₂/kWh
+  operationalLifetime: number; // years
+  totalInstallationCost: number; // R (calculated)
+  totalOperationalCosts: number; // R per year (calculated)
+  location: {
+    latitude: number;
+    longitude: number;
+    city: string;
+    country: string;
+  };
+  weatherData?: WeatherData[];
 }
 
 export interface FinancialParameters {

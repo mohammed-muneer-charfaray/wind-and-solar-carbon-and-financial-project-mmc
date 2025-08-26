@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain } from 'lucide-react';
-import InputForm from './components/InputForm';
+import EnhancedInputForm from './components/EnhancedInputForm';
 import GoalsForm from './components/GoalsForm';
 import MLDashboard from './components/MLDashboard';
 import FinancialMetrics from './components/FinancialMetrics';
@@ -8,35 +8,14 @@ import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
 import CarbonReductionChart from './components/CarbonReductionChart';
 import ElectricityPricePrediction from './components/ElectricityPricePrediction';
-import { mlCalculator } from './utils/mlEnhancedCalculations';
-import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
+import { MLIntegratedData } from './utils/mlDataIntegration';
+import { calculateEnhancedFinancialMetrics, calculateEnhancedEnergyGeneration, calculateEnhancedCarbonReduction } from './utils/enhancedCalculations';
 import { exportToPDF } from './utils/pdfExport';
-import { SystemParameters, FinancialParameters, CalculatedResults } from './types';
+import { CalculatedResults } from './types';
 
 function App() {
   const [activeTab, setActiveTab] = useState('input');
-  const [systemParams, setSystemParams] = useState<SystemParameters>({
-    capacity: 10, // kW
-    efficiency: 18, // %
-    gridEmissionFactor: 0.95, // kg CO₂/kWh
-    operationalLifetime: 25, // years
-    costPerKw: 15000, // R
-    systemSize: 10, // kW
-    installationCost: 150000, // R
-    dailyProductionHours: 5, // hours
-    degradationRate: 0.5, // % per year
-    operationalCosts: 5000, // R per year
-  });
-
-  const [financialParams, setFinancialParams] = useState<FinancialParameters>({
-    electricityPrice: 2.20, // R per kWh
-    electricityPriceIncrease: 8, // % per year
-    financingYears: 10, // years
-    interestRate: 7, // %
-    inflationRate: 5, // %
-    discountRate: 8, // %
-  });
-
+  const [integratedData, setIntegratedData] = useState<MLIntegratedData | null>(null);
   const [results, setResults] = useState<CalculatedResults | null>(null);
   
   // Refs for canvas elements
@@ -44,55 +23,28 @@ function App() {
   const electricityPriceChartRef = useRef<HTMLCanvasElement>(null);
   const carbonReductionChartRef = useRef<HTMLCanvasElement>(null);
 
-  const calculateResults = () => {
-    // Use ML-enhanced calculations
-    mlCalculator.calculateWithMLValidation(systemParams, financialParams)
-      .then(mlResults => {
-        if (mlResults.success) {
-          setResults({
-            ...mlResults.data,
-            electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
-              year: i + 1,
-              price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
-            }))
-          });
-          setActiveTab('financial');
-        } else {
-          // Fallback to conventional calculations
-          const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
-          const energyGeneration = calculateEnergyGeneration(systemParams);
-          const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
-
-          setResults({
-            financialMetrics,
-            energyGeneration,
-            carbonReduction,
-            electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
-              year: i + 1,
-              price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
-            }))
-          });
-          setActiveTab('financial');
-        }
-      })
-      .catch(error => {
-        console.error('ML calculation failed, using fallback:', error);
-        // Fallback to conventional calculations
-        const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
-        const energyGeneration = calculateEnergyGeneration(systemParams);
-        const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
-
-        setResults({
-          financialMetrics,
-          energyGeneration,
-          carbonReduction,
-          electricityPrices: Array.from({ length: systemParams.operationalLifetime }, (_, i) => ({
-            year: i + 1,
-            price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
-          }))
-        });
-        setActiveTab('financial');
-      });
+  const handleIntegratedCalculation = (data: MLIntegratedData) => {
+    setIntegratedData(data);
+    
+    // Calculate enhanced results using ML-integrated data
+    const financialMetrics = calculateEnhancedFinancialMetrics(data);
+    const energyGeneration = calculateEnhancedEnergyGeneration(data);
+    const carbonReduction = calculateEnhancedCarbonReduction(data, energyGeneration);
+    
+    // Generate electricity price forecast
+    const electricityPrices = Array.from({ length: data.systemParams.operationalLifetime }, (_, i) => ({
+      year: i + 1,
+      price: data.financialParams.electricityPrice * Math.pow(1 + data.financialParams.electricityPriceIncrease / 100, i)
+    }));
+    
+    setResults({
+      financialMetrics,
+      energyGeneration,
+      carbonReduction,
+      electricityPrices
+    });
+    
+    setActiveTab('financial');
   };
 
   const handleExportPDF = () => {
@@ -108,18 +60,31 @@ function App() {
   };
 
   const handleGoalsCalculation = (capacity: number, systemSize: number) => {
-    setSystemParams(prev => ({
-      ...prev,
-      capacity,
-      systemSize,
-      installationCost: systemSize * prev.costPerKw
-    }));
-  };
-  const handleMLResultsUpdate = (mlResults: any) => {
-    if (mlResults.optimizedParams) {
-      setSystemParams(prev => ({ ...prev, ...mlResults.optimizedParams }));
+    // Update the first energy source or create a new one
+    if (integratedData) {
+      const updatedSources = [...integratedData.systemParams.energySources];
+      if (updatedSources.length > 0) {
+        updatedSources[0] = {
+          ...updatedSources[0],
+          capacity: systemSize
+        };
+      }
+      
+      const updatedData: MLIntegratedData = {
+        ...integratedData,
+        systemParams: {
+          ...integratedData.systemParams,
+          energySources: updatedSources,
+          totalCapacity: systemSize
+        }
+      };
+      
+      setIntegratedData(updatedData);
     }
-    if (mlResults.financialMetrics) {
+  };
+  
+  const handleMLResultsUpdate = (mlResults: any) => {
+    if (mlResults.financialMetrics && integratedData) {
       setResults(prev => prev ? { ...prev, ...mlResults } : null);
     }
   };
@@ -233,19 +198,13 @@ function App() {
             )}
             {activeTab === 'ml' && (
               <MLDashboard 
-                systemParams={systemParams}
-                financialParams={financialParams}
+                systemParams={integratedData?.systemParams || { energySources: [], totalCapacity: 0, averageEfficiency: 0, gridEmissionFactor: 0.95, operationalLifetime: 25, totalInstallationCost: 0, totalOperationalCosts: 0, location: { latitude: -26.2041, longitude: 28.0473, city: 'Johannesburg', country: 'South Africa' } }}
+                financialParams={integratedData?.financialParams || { electricityPrice: 2.20, electricityPriceIncrease: 8, financingYears: 10, interestRate: 7, inflationRate: 5, discountRate: 8 }}
                 onResultsUpdate={handleMLResultsUpdate}
               />
             )}
             {activeTab === 'input' && (
-              <InputForm
-                systemParams={systemParams}
-                setSystemParams={setSystemParams}
-                financialParams={financialParams}
-                setFinancialParams={setFinancialParams}
-                onCalculate={calculateResults}
-              />
+              <EnhancedInputForm onCalculate={handleIntegratedCalculation} />
             )}
             {activeTab === 'financial' && results && (
               <FinancialMetrics metrics={results.financialMetrics} />

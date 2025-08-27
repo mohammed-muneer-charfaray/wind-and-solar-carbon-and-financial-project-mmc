@@ -1,8 +1,10 @@
 import * as tf from '@tensorflow/tfjs';
 import { SystemParameters, FinancialParameters, EnergySourceType, WeatherData } from '../types';
 import { dataProcessor } from './dataProcessor';
-import { weatherService } from './weatherService';
-import { errorHandler, validateNumericInput, safeCalculation } from './errorHandling';
+import { WeatherService } from './weatherService';
+import { errorHandler } from './errorHandling';
+
+const weatherService = new WeatherService();
 
 export interface MLIntegratedData {
   systemParams: SystemParameters;

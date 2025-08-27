@@ -1,6 +1,22 @@
 import { SystemParameters, FinancialParameters, FinancialMetrics, EnergyGeneration, CarbonReduction, YearlyCashFlow, EnergyByYear, CarbonByYear } from '../types';
-import { MLIntegratedData } from './mlDataIntegration';
-import { safeCalculation, validateNumericInput } from './errorHandling';
+
+export interface MLIntegratedData {
+  systemParams: SystemParameters;
+  financialParams: FinancialParameters;
+  weatherAdjustedFactors: { [key: string]: number };
+  missingDataFlags: string[];
+  confidenceScore: number;
+  recommendations: string[];
+}
+
+function safeCalculation<T>(calculation: () => T, fallback: T): T {
+  try {
+    return calculation();
+  } catch (error) {
+    console.error('Calculation error:', error);
+    return fallback;
+  }
+}
 
 /**
  * Enhanced calculations that work with multiple energy sources and weather data

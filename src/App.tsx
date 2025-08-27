@@ -8,10 +8,18 @@ import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
 import CarbonReductionChart from './components/CarbonReductionChart';
 import ElectricityPricePrediction from './components/ElectricityPricePrediction';
-import { MLIntegratedData } from './utils/mlDataIntegration';
-import { calculateEnhancedFinancialMetrics, calculateEnhancedEnergyGeneration, calculateEnhancedCarbonReduction } from './utils/enhancedCalculations';
+import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
 import { exportToPDF } from './utils/pdfExport';
 import { CalculatedResults } from './types';
+
+interface MLIntegratedData {
+  systemParams: any;
+  financialParams: any;
+  weatherAdjustedFactors: { [key: string]: number };
+  missingDataFlags: string[];
+  confidenceScore: number;
+  recommendations: string[];
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('input');
@@ -26,15 +34,15 @@ function App() {
   const handleIntegratedCalculation = (data: MLIntegratedData) => {
     setIntegratedData(data);
     
-    // Calculate enhanced results using ML-integrated data
-    const financialMetrics = calculateEnhancedFinancialMetrics(data);
-    const energyGeneration = calculateEnhancedEnergyGeneration(data);
-    const carbonReduction = calculateEnhancedCarbonReduction(data, energyGeneration);
+    // Calculate results using conventional calculations
+    const financialMetrics = calculateFinancialMetrics(data.systemParams, data.financialParams);
+    const energyGeneration = calculateEnergyGeneration(data.systemParams);
+    const carbonReduction = calculateCarbonReduction(data.systemParams, energyGeneration);
     
     // Generate electricity price forecast
-    const electricityPrices = Array.from({ length: data.systemParams.operationalLifetime }, (_, i) => ({
+    const electricityPrices = Array.from({ length: data.systemParams.operationalLifetime || 25 }, (_, i) => ({
       year: i + 1,
-      price: data.financialParams.electricityPrice * Math.pow(1 + data.financialParams.electricityPriceIncrease / 100, i)
+      price: (data.financialParams.electricityPrice || 2.20) * Math.pow(1 + (data.financialParams.electricityPriceIncrease || 8) / 100, i)
     }));
     
     setResults({

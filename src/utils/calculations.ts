@@ -100,11 +100,11 @@ function calculateYearlyCashFlows(
   financialParams: FinancialParameters,
   yearlyEnergy: number[]
 ): YearlyCashFlow[] {
-  const { installationCost, operationalCosts, operationalLifetime } = systemParams;
+  const { totalInstallationCost, totalOperationalCosts, operationalLifetime } = systemParams;
   const { electricityPrice, electricityPriceIncrease, financingYears, interestRate } = financialParams;
   
   // Calculate loan payment if financing is used
-  const loanAmount = installationCost;
+  const loanAmount = totalInstallationCost;
   const monthlyInterestRate = interestRate / 100 / 12;
   const numberOfPayments = financingYears * 12;
   
@@ -119,11 +119,11 @@ function calculateYearlyCashFlows(
   const yearlyLoanPayment = monthlyPayment * 12;
   
   // Calculate yearly cash flows
-  const cashFlows: number[] = [-installationCost]; // Initial investment (negative cash flow)
-  let cumulativeCashFlow = -installationCost;
+  const cashFlows: number[] = [-totalInstallationCost]; // Initial investment (negative cash flow)
+  let cumulativeCashFlow = -totalInstallationCost;
   
   const yearlyCashFlows: YearlyCashFlow[] = [
-    { year: 0, cashFlow: -installationCost, cumulativeCashFlow }
+    { year: 0, cashFlow: -totalInstallationCost, cumulativeCashFlow }
   ];
   
   for (let year = 1; year <= operationalLifetime; year++) {
@@ -136,7 +136,7 @@ function calculateYearlyCashFlows(
     
     // Calculate expenses
     const loanPayment = year <= financingYears ? yearlyLoanPayment : 0;
-    const yearlyOperationalCosts = operationalCosts;
+    const yearlyOperationalCosts = totalOperationalCosts;
     
     // Calculate net cash flow
     const cashFlow = revenue - yearlyOperationalCosts - loanPayment;
@@ -158,15 +158,21 @@ export function calculateFinancialMetrics(
   systemParams: SystemParameters,
   financialParams: FinancialParameters
 ): FinancialMetrics {
-  const { systemSize, dailyProductionHours, degradationRate, operationalLifetime, installationCost } = systemParams;
-  
   // Calculate yearly energy production with degradation
   const yearlyEnergy: number[] = [];
-  let annualProduction = systemSize * dailyProductionHours * 365; // kWh
   
-  for (let year = 0; year < operationalLifetime; year++) {
+  for (let year = 0; year < systemParams.operationalLifetime; year++) {
+    let annualProduction = 0;
+    
+    systemParams.energySources
+      .filter(source => source.enabled)
+      .forEach(source => {
+        const baseProduction = source.capacity * source.dailyProductionHours * 365;
+        const degradedProduction = baseProduction * Math.pow(1 - source.degradationRate / 100, year);
+        annualProduction += degradedProduction;
+      });
+    
     yearlyEnergy.push(annualProduction);
-    annualProduction *= (1 - degradationRate / 100); // Apply yearly degradation
   }
   
   // Calculate total energy production over lifetime
@@ -185,12 +191,12 @@ export function calculateFinancialMetrics(
   const paybackPeriod = calculatePaybackPeriod(cumulativeCashFlows);
   
   // Calculate total costs over lifetime
-  const totalCosts = installationCost + (systemParams.operationalCosts * operationalLifetime);
+  const totalCosts = systemParams.totalInstallationCost + (systemParams.totalOperationalCosts * systemParams.operationalLifetime);
   
   // Calculate total returns (sum of all positive cash flows)
   const totalReturns = cashFlowValues.filter(cf => cf > 0).reduce((sum, cf) => sum + cf, 0);
   
-  const roi = calculateROI(installationCost, totalReturns);
+  const roi = calculateROI(systemParams.totalInstallationCost, totalReturns);
   const lcoe = calculateLCOE(totalCosts, totalEnergyProduction);
   
   return {
@@ -204,24 +210,36 @@ export function calculateFinancialMetrics(
 }
 
 export function calculateEnergyGeneration(systemParams: SystemParameters): EnergyGeneration {
-  const { systemSize, dailyProductionHours, degradationRate, operationalLifetime } = systemParams;
-  
   // Calculate daily, monthly, and yearly production
-  const dailyProduction = systemSize * dailyProductionHours; // kWh
-  const monthlyProduction = dailyProduction * 30; // kWh
-  const yearlyProduction = dailyProduction * 365; // kWh
+  let dailyProduction = 0;
+  
+  systemParams.energySources
+    .filter(source => source.enabled)
+    .forEach(source => {
+      dailyProduction += source.capacity * source.dailyProductionHours;
+    });
+  
+  const monthlyProduction = dailyProduction * 30;
+  const yearlyProduction = dailyProduction * 365;
   
   // Calculate yearly energy production with degradation
   const lifetimeEnergy: EnergyByYear[] = [];
-  let annualProduction = yearlyProduction;
   
-  for (let year = 1; year <= operationalLifetime; year++) {
+  for (let year = 1; year <= systemParams.operationalLifetime; year++) {
+    let annualProduction = 0;
+    
+    systemParams.energySources
+      .filter(source => source.enabled)
+      .forEach(source => {
+        const baseProduction = source.capacity * source.dailyProductionHours * 365;
+        const degradedProduction = baseProduction * Math.pow(1 - source.degradationRate / 100, year - 1);
+        annualProduction += degradedProduction;
+      });
+    
     lifetimeEnergy.push({
       year,
       energy: annualProduction
     });
-    
-    annualProduction *= (1 - degradationRate / 100); // Apply yearly degradation
   }
   
   return {
@@ -239,8 +257,8 @@ export function calculateCarbonReduction(
   const { gridEmissionFactor } = systemParams;
   
   // Calculate carbon reduction
-  const dailyReduction = energyGeneration.daily * gridEmissionFactor; // kg CO₂
-  const yearlyReduction = energyGeneration.yearly * gridEmissionFactor; // kg CO₂
+  const dailyReduction = energyGeneration.daily * gridEmissionFactor;
+  const yearlyReduction = energyGeneration.yearly * gridEmissionFactor;
   
   // Calculate yearly carbon reduction with degradation
   const yearlyReductions: CarbonByYear[] = energyGeneration.lifetime.map(yearData => ({

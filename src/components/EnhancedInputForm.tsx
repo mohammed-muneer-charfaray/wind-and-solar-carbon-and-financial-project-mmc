@@ -231,7 +231,10 @@ const EnhancedInputForm: React.FC<EnhancedInputFormProps> = ({ onCalculate }) =>
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Enhanced System Configuration</h2>
+        <h2 className="text-2xl font-bold flex items-center">
+          <Brain className="h-6 w-6 mr-2 text-purple-600" />
+          ML-Enhanced System Configuration
+        </h2>
         <div className="flex space-x-3">
           <button
             onClick={handleMLIntegration}

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain } from 'lucide-react';
 import EnhancedInputForm from './components/EnhancedInputForm';
+import ManualInputForm from './components/ManualInputForm';
 import GoalsForm from './components/GoalsForm';
 import MLDashboard from './components/MLDashboard';
 import FinancialMetrics from './components/FinancialMetrics';
@@ -10,7 +11,7 @@ import CarbonReductionChart from './components/CarbonReductionChart';
 import ElectricityPricePrediction from './components/ElectricityPricePrediction';
 import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
 import { exportToPDF } from './utils/pdfExport';
-import { CalculatedResults } from './types';
+import { CalculatedResults, SystemParameters, FinancialParameters } from './types';
 
 interface MLIntegratedData {
   systemParams: any;
@@ -25,6 +26,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('input');
   const [integratedData, setIntegratedData] = useState<MLIntegratedData | null>(null);
   const [results, setResults] = useState<CalculatedResults | null>(null);
+  const [inputMode, setInputMode] = useState<'enhanced' | 'manual'>('enhanced');
   
   // Refs for canvas elements
   const investmentGraphRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +52,43 @@ function App() {
       energyGeneration,
       carbonReduction,
       electricityPrices
+    });
+    
+    setActiveTab('financial');
+  };
+
+  const handleManualCalculation = (systemParams: SystemParameters, financialParams: FinancialParameters) => {
+    // Calculate results using conventional calculations with manual inputs
+    const financialMetrics = calculateFinancialMetrics(systemParams, financialParams);
+    const energyGeneration = calculateEnergyGeneration(systemParams);
+    const carbonReduction = calculateCarbonReduction(systemParams, energyGeneration);
+    
+    // Generate electricity price forecast
+    const electricityPrices = Array.from({ length: systemParams.operationalLifetime || 25 }, (_, i) => ({
+      year: i + 1,
+      price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
+    }));
+    
+    setResults({
+      financialMetrics,
+      energyGeneration,
+      carbonReduction,
+      electricityPrices
+    });
+    
+    // Create integrated data for consistency
+    setIntegratedData({
+      systemParams,
+      financialParams,
+      weatherAdjustedFactors: {
+        solar: 1.0,
+        wind: 1.0,
+        hydro: 1.0,
+        wave: 1.0
+      },
+      missingDataFlags: [],
+      confidenceScore: 1.0,
+      recommendations: ['Manual input mode - all parameters user-defined']
     });
     
     setActiveTab('financial');
@@ -146,7 +185,7 @@ function App() {
               onClick={() => setActiveTab('input')}
             >
               <Calculator className="h-4 w-4 mr-2" />
-              Input Parameters
+              {inputMode === 'enhanced' ? 'Enhanced Input' : 'Manual Input'}
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
@@ -201,6 +240,46 @@ function App() {
           </div>
 
           <div className="p-6">
+            {activeTab === 'input' && (
+              <div className="mb-6">
+                <div className="flex items-center justify-center space-x-4 mb-6">
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setInputMode('enhanced')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        inputMode === 'enhanced'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Brain className="h-4 w-4 mr-2 inline" />
+                      ML Enhanced
+                    </button>
+                    <button
+                      onClick={() => setInputMode('manual')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        inputMode === 'manual'
+                          ? 'bg-green-600 text-white shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Calculator className="h-4 w-4 mr-2 inline" />
+                      Manual Input
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="text-center mb-6">
+                  <p className="text-sm text-gray-600">
+                    {inputMode === 'enhanced' 
+                      ? 'AI-powered analysis with weather integration and automatic data validation'
+                      : 'Complete manual control over all system parameters and calculations'
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'goals' && (
               <GoalsForm onCalculate={handleGoalsCalculation} />
             )}
@@ -212,7 +291,13 @@ function App() {
               />
             )}
             {activeTab === 'input' && (
-              <EnhancedInputForm onCalculate={handleIntegratedCalculation} />
+              <>
+                {inputMode === 'enhanced' ? (
+                  <EnhancedInputForm onCalculate={handleIntegratedCalculation} />
+                ) : (
+                  <ManualInputForm onCalculate={handleManualCalculation} />
+                )}
+              </>
             )}
             {activeTab === 'financial' && results && (
               <FinancialMetrics metrics={results.financialMetrics} />

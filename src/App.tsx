@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain } from 'lucide-react';
+import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain, Cpu } from 'lucide-react';
 import EnhancedInputForm from './components/EnhancedInputForm';
 import ManualInputForm from './components/ManualInputForm';
 import GoalsForm from './components/GoalsForm';
 import MLDashboard from './components/MLDashboard';
+import LSTMDashboard from './components/LSTMDashboard';
 import FinancialMetrics from './components/FinancialMetrics';
 import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
@@ -12,6 +13,7 @@ import ElectricityPricePrediction from './components/ElectricityPricePrediction'
 import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
 import { exportToPDF } from './utils/pdfExport';
 import { CalculatedResults, SystemParameters, FinancialParameters } from './types';
+import { LLMAnalysis } from './utils/llmIntegration';
 
 interface MLIntegratedData {
   systemParams: any;
@@ -27,6 +29,7 @@ function App() {
   const [integratedData, setIntegratedData] = useState<MLIntegratedData | null>(null);
   const [results, setResults] = useState<CalculatedResults | null>(null);
   const [inputMode, setInputMode] = useState<'enhanced' | 'manual'>('enhanced');
+  const [llmAnalysis, setLLMAnalysis] = useState<LLMAnalysis | null>(null);
   
   // Refs for canvas elements
   const investmentGraphRef = useRef<HTMLCanvasElement>(null);
@@ -92,6 +95,49 @@ function App() {
     });
     
     setActiveTab('financial');
+  };
+
+  const handleLLMAnalysisUpdate = (analysis: LLMAnalysis) => {
+    setLLMAnalysis(analysis);
+    
+    // Update integrated data with LLM recommendations
+    if (integratedData) {
+      const updatedEnergySources = analysis.renewableRecommendations
+        .filter(rec => rec.recommended)
+        .map(rec => ({
+          type: rec.energyType,
+          enabled: true,
+          capacity: rec.capacity,
+          efficiency: rec.energyType === 'solar' ? 18.5 : 
+                     rec.energyType === 'wind' ? 35 : 
+                     rec.energyType === 'hydro' ? 85 : 25,
+          costPerKw: rec.energyType === 'solar' ? 15000 : 
+                     rec.energyType === 'wind' ? 18000 : 
+                     rec.energyType === 'hydro' ? 25000 : 35000,
+          dailyProductionHours: rec.energyType === 'solar' ? 5.2 : 
+                               rec.energyType === 'wind' ? 8.5 : 
+                               rec.energyType === 'hydro' ? 20 : 16,
+          degradationRate: rec.energyType === 'solar' ? 0.5 : 
+                          rec.energyType === 'wind' ? 0.3 : 
+                          rec.energyType === 'hydro' ? 0.1 : 0.8,
+          specificOperationalCosts: rec.energyType === 'solar' ? 200 : 
+                                   rec.energyType === 'wind' ? 400 : 
+                                   rec.energyType === 'hydro' ? 300 : 800
+        }));
+
+      const updatedData = {
+        ...integratedData,
+        systemParams: {
+          ...integratedData.systemParams,
+          energySources: updatedEnergySources,
+          totalCapacity: analysis.totalRecommendedCapacity,
+          location: analysis.location
+        }
+      };
+
+      setIntegratedData(updatedData);
+      handleIntegratedCalculation(updatedData);
+    }
   };
 
   const handleExportPDF = () => {
@@ -171,12 +217,21 @@ function App() {
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
+                activeTab === 'lstm' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('lstm')}
+            >
+              <Cpu className="h-4 w-4 mr-2" />
+              LSTM Analysis
+            </button>
+            <button
+              className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
                 activeTab === 'ml' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
               }`}
               onClick={() => setActiveTab('ml')}
             >
               <Brain className="h-4 w-4 mr-2" />
-              ML Analysis
+              ML Dashboard
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
@@ -282,6 +337,17 @@ function App() {
 
             {activeTab === 'goals' && (
               <GoalsForm onCalculate={handleGoalsCalculation} />
+            )}
+            {activeTab === 'lstm' && (
+              <LSTMDashboard 
+                location={integratedData?.systemParams?.location || { 
+                  latitude: -26.2041, 
+                  longitude: 28.0473, 
+                  city: 'Johannesburg', 
+                  country: 'South Africa' 
+                }}
+                onRecommendationsUpdate={handleLLMAnalysisUpdate}
+              />
             )}
             {activeTab === 'ml' && (
               <MLDashboard 

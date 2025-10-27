@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, Zap, TrendingUp, Grid, Battery, AlertTriangle, CheckCircle, BarChart3 } from 'lucide-react';
+import { Brain, Zap, TrendingUp, Grid2x2 as Grid, Battery, AlertTriangle, CheckCircle, BarChart3 } from 'lucide-react';
 import { 
   WeatherUsageLSTM, 
   FinanceReturnLSTM, 

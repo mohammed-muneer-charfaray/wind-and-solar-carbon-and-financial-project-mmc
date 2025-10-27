@@ -5,6 +5,7 @@ import ManualInputForm from './components/ManualInputForm';
 import GoalsForm from './components/GoalsForm';
 import MLDashboard from './components/MLDashboard';
 import LSTMDashboard from './components/LSTMDashboard';
+import AdvancedLSTMDashboard from './components/AdvancedLSTMDashboard';
 import FinancialMetrics from './components/FinancialMetrics';
 import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
@@ -14,6 +15,7 @@ import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonRe
 import { exportToPDF } from './utils/pdfExport';
 import { CalculatedResults, SystemParameters, FinancialParameters } from './types';
 import { LLMAnalysis } from './utils/llmIntegration';
+import { GridRenewableCapacity } from './utils/advancedLSTMModels';
 
 interface MLIntegratedData {
   systemParams: any;
@@ -30,6 +32,7 @@ function App() {
   const [results, setResults] = useState<CalculatedResults | null>(null);
   const [inputMode, setInputMode] = useState<'enhanced' | 'manual'>('enhanced');
   const [llmAnalysis, setLLMAnalysis] = useState<LLMAnalysis | null>(null);
+  const [gridAnalysis, setGridAnalysis] = useState<GridRenewableCapacity | null>(null);
   
   // Refs for canvas elements
   const investmentGraphRef = useRef<HTMLCanvasElement>(null);
@@ -140,6 +143,9 @@ function App() {
     }
   };
 
+  const handleGridAnalysisUpdate = (analysis: GridRenewableCapacity) => {
+    setGridAnalysis(analysis);
+  };
   const handleExportPDF = () => {
     if (!results) return;
 
@@ -217,12 +223,21 @@ function App() {
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
+                activeTab === 'advanced-lstm' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('advanced-lstm')}
+            >
+              <Cpu className="h-4 w-4 mr-2" />
+              Advanced LSTM
+            </button>
+            <button
+              className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
                 activeTab === 'lstm' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
               }`}
               onClick={() => setActiveTab('lstm')}
             >
               <Cpu className="h-4 w-4 mr-2" />
-              LSTM Analysis
+              Basic LSTM
             </button>
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
@@ -337,6 +352,14 @@ function App() {
 
             {activeTab === 'goals' && (
               <GoalsForm onCalculate={handleGoalsCalculation} />
+            )}
+            {activeTab === 'advanced-lstm' && (
+              <AdvancedLSTMDashboard 
+                weatherData={[]} // Would be populated with real weather data
+                usageData={[]} // Would be populated with Excel usage data
+                financialData={[]} // Would be populated with financial data
+                onGridAnalysisUpdate={handleGridAnalysisUpdate}
+              />
             )}
             {activeTab === 'lstm' && (
               <LSTMDashboard 

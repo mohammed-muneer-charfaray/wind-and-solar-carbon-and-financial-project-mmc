@@ -1,11 +1,12 @@
-import React, { useState, useRef } from 'react';
-import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain, Cpu } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain, Cpu, Database } from 'lucide-react';
 import EnhancedInputForm from './components/EnhancedInputForm';
 import ManualInputForm from './components/ManualInputForm';
 import GoalsForm from './components/GoalsForm';
 import MLDashboard from './components/MLDashboard';
 import LSTMDashboard from './components/LSTMDashboard';
 import AdvancedLSTMDashboard from './components/AdvancedLSTMDashboard';
+import DataStorageManager from './components/DataStorageManager';
 import FinancialMetrics from './components/FinancialMetrics';
 import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';
@@ -16,6 +17,8 @@ import { exportToPDF } from './utils/pdfExport';
 import { CalculatedResults, SystemParameters, FinancialParameters } from './types';
 import { LLMAnalysis } from './utils/llmIntegration';
 import { GridRenewableCapacity } from './utils/advancedLSTMModels';
+import { localStorageManager } from './utils/localStorageManager';
+import { dataIntegrationService } from './utils/dataIntegration';
 
 interface MLIntegratedData {
   systemParams: any;
@@ -39,6 +42,20 @@ function App() {
   const electricityPriceChartRef = useRef<HTMLCanvasElement>(null);
   const carbonReductionChartRef = useRef<HTMLCanvasElement>(null);
 
+  // Initialize storage on app start
+  useEffect(() => {
+    const initializeStorage = async () => {
+      try {
+        await localStorageManager.initialize();
+        console.log('Local storage initialized');
+      } catch (error) {
+        console.error('Failed to initialize storage:', error);
+      }
+    };
+    
+    initializeStorage();
+  }, []);
+
   const handleIntegratedCalculation = (data: MLIntegratedData) => {
     setIntegratedData(data);
     
@@ -52,6 +69,20 @@ function App() {
       year: i + 1,
       price: (data.financialParams.electricityPrice || 2.20) * Math.pow(1 + (data.financialParams.electricityPriceIncrease || 8) / 100, i)
     }));
+    
+    // Save results to local storage
+    dataIntegrationService.saveCalculationResults(
+      'integrated_calculation',
+      {
+        financialMetrics,
+        energyGeneration,
+        carbonReduction,
+        electricityPrices
+      },
+      undefined, // weather data
+      undefined, // usage data
+      data // ML analysis
+    ).catch(error => console.warn('Failed to save results:', error));
     
     setResults({
       financialMetrics,
@@ -74,6 +105,14 @@ function App() {
       year: i + 1,
       price: financialParams.electricityPrice * Math.pow(1 + financialParams.electricityPriceIncrease / 100, i)
     }));
+    
+    // Save configuration to local storage
+    dataIntegrationService.saveSystemConfiguration(
+      `Manual Configuration ${new Date().toISOString()}`,
+      systemParams,
+      financialParams,
+      'Manual input configuration'
+    ).catch(error => console.warn('Failed to save configuration:', error));
     
     setResults({
       financialMetrics,
@@ -214,6 +253,15 @@ function App() {
           <div className="flex border-b overflow-x-auto">
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
+                activeTab === 'storage' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('storage')}
+            >
+              <Database className="h-4 w-4 mr-2" />
+              Data Storage
+            </button>
+            <button
+              className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
                 activeTab === 'goals' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
               }`}
               onClick={() => setActiveTab('goals')}
@@ -352,6 +400,9 @@ function App() {
 
             {activeTab === 'goals' && (
               <GoalsForm onCalculate={handleGoalsCalculation} />
+            )}
+            {activeTab === 'storage' && (
+              <DataStorageManager />
             )}
             {activeTab === 'advanced-lstm' && (
               <AdvancedLSTMDashboard 

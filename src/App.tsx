@@ -42,18 +42,24 @@ function App() {
   const electricityPriceChartRef = useRef<HTMLCanvasElement>(null);
   const carbonReductionChartRef = useRef<HTMLCanvasElement>(null);
 
-  // Initialize storage on app start
+  // Initialize storage and fetch weather
   useEffect(() => {
-    const initializeStorage = async () => {
+    const initializeApp = async () => {
       try {
         await localStorageManager.initialize();
         console.log('Local storage initialized');
+
+        // Fetch weather data for Johannesburg
+        const weather = await weatherService.getWeatherData(-26.2041, 28.0473);
+        if (weather) {
+          setWeatherData(weather);
+        }
       } catch (error) {
-        console.error('Failed to initialize storage:', error);
+        console.error('Failed to initialize app:', error);
       }
     };
-    
-    initializeStorage();
+
+    initializeApp();
   }, []);
 
   const handleIntegratedCalculation = (data: MLIntegratedData) => {
@@ -253,6 +259,15 @@ function App() {
           <div className="flex border-b overflow-x-auto">
             <button
               className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
+                activeTab === 'scada' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('scada')}
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              SCADA Control
+            </button>
+            <button
+              className={`px-4 py-3 font-medium flex items-center whitespace-nowrap ${
                 activeTab === 'storage' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
               }`}
               onClick={() => setActiveTab('storage')}
@@ -358,6 +373,13 @@ function App() {
           </div>
 
           <div className="p-6">
+            {activeTab === 'scada' && (
+              <SCADADashboard
+                substationId={currentSubstationId}
+                userId={currentUserId}
+                weather={weatherData}
+              />
+            )}
             {activeTab === 'input' && (
               <div className="mb-6">
                 <div className="flex items-center justify-center space-x-4 mb-6">

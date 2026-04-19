@@ -294,6 +294,4 @@ export class WeatherService {
   }
 }
 
-// Export both the class and a singleton instance
-export { WeatherService };
 export const weatherService = WeatherService.getInstance();

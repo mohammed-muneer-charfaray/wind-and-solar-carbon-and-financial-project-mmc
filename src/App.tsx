@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain, Cpu, Database } from 'lucide-react';
+import { Calculator, Wind, Sun, DollarSign, BarChart3, LineChart, Leaf, Download, Target, Brain, Cpu, Database, Zap } from 'lucide-react';
 import EnhancedInputForm from './components/EnhancedInputForm';
 import ManualInputForm from './components/ManualInputForm';
 import GoalsForm from './components/GoalsForm';
@@ -14,11 +14,12 @@ import CarbonReductionChart from './components/CarbonReductionChart';
 import ElectricityPricePrediction from './components/ElectricityPricePrediction';
 import { calculateFinancialMetrics, calculateEnergyGeneration, calculateCarbonReduction } from './utils/calculations';
 import { exportToPDF } from './utils/pdfExport';
-import { CalculatedResults, SystemParameters, FinancialParameters } from './types';
+import { CalculatedResults, SystemParameters, FinancialParameters, WeatherData } from './types';
 import { LLMAnalysis } from './utils/llmIntegration';
 import { GridRenewableCapacity } from './utils/advancedLSTMModels';
 import { localStorageManager } from './utils/localStorageManager';
 import { dataIntegrationService } from './utils/dataIntegration';
+import { weatherService } from './utils/weatherService';
 
 interface MLIntegratedData {
   systemParams: any;
@@ -36,7 +37,10 @@ function App() {
   const [inputMode, setInputMode] = useState<'enhanced' | 'manual'>('enhanced');
   const [llmAnalysis, setLLMAnalysis] = useState<LLMAnalysis | null>(null);
   const [gridAnalysis, setGridAnalysis] = useState<GridRenewableCapacity | null>(null);
-  
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [currentUserId] = useState<string>('demo-user');
+  const [currentSubstationId] = useState<string>('demo-substation');
+
   // Refs for canvas elements
   const investmentGraphRef = useRef<HTMLCanvasElement>(null);
   const electricityPriceChartRef = useRef<HTMLCanvasElement>(null);

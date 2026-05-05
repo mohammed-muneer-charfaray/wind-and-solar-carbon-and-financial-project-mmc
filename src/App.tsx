@@ -7,6 +7,7 @@ import MLDashboard from './components/MLDashboard';
 import LSTMDashboard from './components/LSTMDashboard';
 import AdvancedLSTMDashboard from './components/AdvancedLSTMDashboard';
 import DataStorageManager from './components/DataStorageManager';
+import SCADADashboard from './components/SCADADashboard';
 import FinancialMetrics from './components/FinancialMetrics';
 import InvestmentGraph from './components/InvestmentGraph';
 import EnergyGenerationTable from './components/EnergyGenerationTable';

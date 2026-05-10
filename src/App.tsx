@@ -55,7 +55,7 @@ function App() {
         console.log('Local storage initialized');
 
         // Fetch weather data for Johannesburg
-        const weather = await weatherService.getWeatherData(-26.2041, 28.0473);
+        const weather = await weatherService.getCurrentWeather(-26.2041, 28.0473);
         if (weather) {
           setWeatherData(weather);
         }

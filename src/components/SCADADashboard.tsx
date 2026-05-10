@@ -23,7 +23,6 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
   const [controlCommands, setControlCommands] = useState<ControlCommand[]>([]);
   const [protectionEvents, setProtectionEvents] = useState<any[]>([]);
   const [targetPower, setTargetPower] = useState(450);
-  const [reactivePower, setReactivePower] = useState(0);
   const [weatherCondition, setWeatherCondition] = useState<'clear' | 'partial_cloud' | 'overcast' | 'severe_weather'>('partial_cloud');
 
   // Simulate real-time data updates
@@ -148,8 +147,6 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
     voltageReactiveSupport = -20000;
     voltageReason = 'High voltage - absorbing reactive power';
   }
-
-  setReactivePower(voltageReactiveSupport);
 
   const handleEmergencyShutdown = () => {
     setCurrentPower(0);
@@ -291,7 +288,7 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
               <h4 className="font-medium text-gray-900 mb-2">Voltage Support (Volt-VAR)</h4>
               <div className="text-sm text-gray-600 space-y-1">
                 <p><span className="font-medium">Voltage Error:</span> {voltageError.toFixed(3)} pu</p>
-                <p><span className="font-medium">Reactive Power:</span> {reactivePower.toFixed(0)} VAR</p>
+                <p><span className="font-medium">Reactive Power:</span> {voltageReactiveSupport.toFixed(0)} VAR</p>
                 <p className="text-xs mt-2 text-gray-500">{voltageReason}</p>
               </div>
             </div>

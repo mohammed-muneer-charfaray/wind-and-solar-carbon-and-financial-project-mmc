@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, Zap, Gauge, Thermometer, Wind, Radio } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Zap, Gauge, Wind, Radio } from 'lucide-react';
 import { WeatherData } from '../types';
-import { scadaControl, WeatherForecast, SCAdAControlCommand } from '../utils/scadaControl';
-import { substationIntegration, ProtectionEvent } from '../utils/substationIntegration';
 
 interface SCADADashboardProps {
   substationId: string;
@@ -10,22 +8,23 @@ interface SCADADashboardProps {
   weather?: WeatherData | null;
 }
 
+interface ControlCommand {
+  timestamp: Date;
+  plantId: string;
+  powerTargetKw: number;
+  reason: string;
+}
+
 export default function SCADADashboard({ substationId, userId, weather }: SCADADashboardProps) {
   const [currentPower, setCurrentPower] = useState(450);
   const [gridVoltage, setGridVoltage] = useState(1.02);
   const [gridFrequency, setGridFrequency] = useState(50.1);
   const [plantStatus, setPlantStatus] = useState<'normal' | 'warning' | 'critical'>('normal');
-  const [controlCommands, setControlCommands] = useState<SCAdAControlCommand[]>([]);
-  const [protectionEvents, setProtectionEvents] = useState<ProtectionEvent[]>([]);
+  const [controlCommands, setControlCommands] = useState<ControlCommand[]>([]);
+  const [protectionEvents, setProtectionEvents] = useState<any[]>([]);
   const [targetPower, setTargetPower] = useState(450);
-  const [weatherForecast, setWeatherForecast] = useState<WeatherForecast>({
-    timestamp: new Date(),
-    irradianceWm2: 750,
-    cloudCoverPercent: 20,
-    temperature: 22,
-    windSpeed: 5,
-    severity: 'partial_cloud'
-  });
+  const [reactivePower, setReactivePower] = useState(0);
+  const [weatherCondition, setWeatherCondition] = useState<'clear' | 'partial_cloud' | 'overcast' | 'severe_weather'>('partial_cloud');
 
   // Simulate real-time data updates
   useEffect(() => {
@@ -52,100 +51,126 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate weather-responsive setpoint
+  // Weather-responsive power control
   useEffect(() => {
-    const { targetPowerKw, rampRateKwPerMinute, reason } = scadaControl.calculateWeatherResponsiveSetpoint(
-      currentPower,
-      weatherForecast,
-      500, // Plant capacity
-      100  // Max ramp rate
-    );
+    let targetPowerKw = 450;
+    let reason = '';
+
+    if (weatherCondition === 'severe_weather') {
+      targetPowerKw = 100;
+      reason = 'Severe weather detected - emergency power reduction to 20%';
+    } else if (weatherCondition === 'overcast') {
+      targetPowerKw = 300;
+      reason = 'Overcast forecast - gradual power reduction';
+    } else if (weatherCondition === 'partial_cloud') {
+      targetPowerKw = 380;
+      reason = 'Partial cloud cover - adjusting for forecast conditions';
+    } else {
+      targetPowerKw = 450;
+      reason = 'Clear sky forecast - ramping to maximum available power';
+    }
 
     setTargetPower(targetPowerKw);
 
-    if (reason && controlCommands.length === 0) {
-      const command = scadaControl.generateControlCommand(
-        substationId,
-        currentPower,
-        targetPowerKw,
-        rampRateKwPerMinute,
-        1
-      );
+    if (controlCommands.length === 0 || controlCommands[0].reason !== reason) {
+      const command: ControlCommand = {
+        timestamp: new Date(),
+        plantId: substationId,
+        powerTargetKw,
+        reason
+      };
       setControlCommands([command]);
     }
-  }, [weatherForecast, currentPower, substationId]);
+  }, [weatherCondition, substationId]);
 
-  // Check for anti-islanding and protection conditions
+  // Check grid conditions and set status
   useEffect(() => {
-    const islandingCheck = substationIntegration.performAntiIslandingCheck(
-      gridVoltage,
-      gridFrequency,
-      0.01,
-      0.02,
-      160
-    );
+    let status: 'normal' | 'warning' | 'critical' = 'normal';
+    let event = null;
 
-    if (islandingCheck.isAntiIslandingDetected) {
-      const event = substationIntegration.createProtectionEvent(
-        'anti_islanding',
-        gridVoltage,
-        gridFrequency,
-        islandingCheck.reason
-      );
+    // Check anti-islanding conditions
+    if (gridVoltage < 0.1) {
+      status = 'critical';
+      event = {
+        timestamp: new Date(),
+        type: 'anti_islanding',
+        reason: 'Voltage collapse detected - grid loss confirmed',
+        severity: 'critical'
+      };
+    }
+    // Check frequency
+    else if (Math.abs(gridFrequency - 50) > 1.0) {
+      status = 'critical';
+      event = {
+        timestamp: new Date(),
+        type: 'frequency_fault',
+        reason: `Frequency drift: ${gridFrequency.toFixed(2)} Hz`,
+        severity: 'critical'
+      };
+    }
+    // Check voltage limits
+    else if (gridVoltage < 0.45 || gridVoltage > 1.2) {
+      status = 'warning';
+      event = {
+        timestamp: new Date(),
+        type: 'voltage_fault',
+        reason: `Abnormal voltage: ${gridVoltage.toFixed(3)} kV`,
+        severity: 'warning'
+      };
+    }
+
+    setPlantStatus(status);
+
+    if (event && protectionEvents.length < 10) {
       setProtectionEvents(prev => [event, ...prev.slice(0, 9)]);
-      setPlantStatus('critical');
-    } else {
-      // Check frequency compliance
-      const freqCheck = substationIntegration.checkFrequencyCompliance(gridFrequency);
-
-      if (!freqCheck.isCompliant) {
-        const event = substationIntegration.createProtectionEvent(
-          'frequency_fault',
-          gridVoltage,
-          gridFrequency
-        );
-        setProtectionEvents(prev => [event, ...prev.slice(0, 9)]);
-        setPlantStatus('critical');
-      } else {
-        setPlantStatus('normal');
-      }
     }
   }, [gridVoltage, gridFrequency]);
 
-  const frequencySupport = scadaControl.calculateFrequencySupportResponse(
-    gridFrequency,
-    50,
-    currentPower,
-    500,
-    5
-  );
+  // Calculate frequency support response
+  const frequencyError = gridFrequency - 50;
+  const frequencySupport = {
+    frequencyError,
+    adjustedPower: currentPower * (1 - (frequencyError / 50) * 0.05),
+    reason: frequencyError < -0.5 ? 'Grid frequency low - increasing output' :
+            frequencyError > 0.5 ? 'Grid frequency high - reducing output' :
+            'Normal operation'
+  };
 
-  const voltageSupport = scadaControl.calculateVoltageSupportResponse(
-    gridVoltage,
-    1.0,
-    50000
-  );
+  // Calculate voltage support
+  const voltageError = gridVoltage - 1.0;
+  let voltageReactiveSupport = 0;
+  let voltageReason = 'Voltage within normal range';
+
+  if (voltageError < -0.08) {
+    voltageReactiveSupport = 20000;
+    voltageReason = 'Low voltage - injecting reactive power';
+  } else if (voltageError > 0.08) {
+    voltageReactiveSupport = -20000;
+    voltageReason = 'High voltage - absorbing reactive power';
+  }
+
+  setReactivePower(voltageReactiveSupport);
 
   const handleEmergencyShutdown = () => {
-    const command = scadaControl.generateEmergencyShutdown(
-      substationId,
-      'Manual emergency shutdown initiated',
-      0
-    );
-    setControlCommands([command]);
-    setPlantStatus('critical');
     setCurrentPower(0);
+    setTargetPower(0);
+    setPlantStatus('critical');
+    const command: ControlCommand = {
+      timestamp: new Date(),
+      plantId: substationId,
+      powerTargetKw: 0,
+      reason: 'Emergency shutdown initiated'
+    };
+    setControlCommands([command]);
   };
 
   const handleWeatherUpdate = (severity: 'clear' | 'partial_cloud' | 'overcast' | 'severe_weather') => {
-    setWeatherForecast(prev => ({
-      ...prev,
-      severity,
-      irradianceWm2: severity === 'clear' ? 950 :
-                     severity === 'partial_cloud' ? 750 :
-                     severity === 'overcast' ? 400 : 100
-    }));
+    setWeatherCondition(severity);
   };
+
+  const irradiance = weatherCondition === 'clear' ? 950 :
+                     weatherCondition === 'partial_cloud' ? 750 :
+                     weatherCondition === 'overcast' ? 400 : 100;
 
   return (
     <div className="space-y-6">
@@ -208,7 +233,7 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
                   key={level}
                   onClick={() => handleWeatherUpdate(level)}
                   className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    weatherForecast.severity === level
+                    weatherCondition === level
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -221,10 +246,10 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
 
           <div className="bg-gray-50 p-3 rounded mb-4">
             <div className="text-sm text-gray-600 mb-2">
-              <span className="font-medium">Irradiance:</span> {weatherForecast.irradianceWm2} W/m²
+              <span className="font-medium">Irradiance:</span> {irradiance} W/m²
             </div>
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Cloud Cover:</span> {weatherForecast.cloudCoverPercent}%
+              <span className="font-medium">Cloud Cover:</span> {weatherCondition === 'clear' ? '0%' : weatherCondition === 'partial_cloud' ? '20%' : weatherCondition === 'overcast' ? '80%' : '95%'}
             </div>
           </div>
 
@@ -257,7 +282,7 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
               <h4 className="font-medium text-gray-900 mb-2">Frequency Support (Droop Control)</h4>
               <div className="text-sm text-gray-600 space-y-1">
                 <p><span className="font-medium">Frequency Error:</span> {frequencySupport.frequencyError.toFixed(3)} Hz</p>
-                <p><span className="font-medium">Adjusted Power:</span> {frequencySupport.adjustedPowerKw.toFixed(1)} kW</p>
+                <p><span className="font-medium">Adjusted Power:</span> {frequencySupport.adjustedPower.toFixed(1)} kW</p>
                 <p className="text-xs mt-2 text-gray-500">{frequencySupport.reason}</p>
               </div>
             </div>
@@ -265,9 +290,9 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
             <div className="border border-gray-200 rounded-lg p-4">
               <h4 className="font-medium text-gray-900 mb-2">Voltage Support (Volt-VAR)</h4>
               <div className="text-sm text-gray-600 space-y-1">
-                <p><span className="font-medium">Voltage Error:</span> {voltageSupport.voltageError.toFixed(3)} pu</p>
-                <p><span className="font-medium">Reactive Power:</span> {voltageSupport.reactivePowerVar.toFixed(0)} VAR</p>
-                <p className="text-xs mt-2 text-gray-500">{voltageSupport.reason}</p>
+                <p><span className="font-medium">Voltage Error:</span> {voltageError.toFixed(3)} pu</p>
+                <p><span className="font-medium">Reactive Power:</span> {reactivePower.toFixed(0)} VAR</p>
+                <p className="text-xs mt-2 text-gray-500">{voltageReason}</p>
               </div>
             </div>
           </div>
@@ -283,7 +308,7 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
               <div key={idx} className="border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm">
                 <p className="font-medium text-gray-900">{cmd.reason}</p>
                 <div className="text-xs text-gray-600 mt-1 space-y-1">
-                  <p>Target: {cmd.powerTargetKw.toFixed(1)} kW • Ramp: {cmd.rampRateKwPerMinute.toFixed(1)} kW/min</p>
+                  <p>Target: {cmd.powerTargetKw.toFixed(1)} kW</p>
                   <p>{cmd.timestamp.toLocaleTimeString()}</p>
                 </div>
               </div>
@@ -306,7 +331,8 @@ export default function SCADADashboard({ substationId, userId, weather }: SCADAD
                     : 'bg-yellow-50 border-yellow-500'
                 }`}
               >
-                <p className="text-sm font-medium text-gray-900">{event.eventType.replace('_', ' ')}</p>
+                <p className="text-sm font-medium text-gray-900">{event.type.replace('_', ' ')}</p>
+                <p className="text-xs text-gray-700 mt-1">{event.reason}</p>
                 <p className="text-xs text-gray-600 mt-1">{event.timestamp.toLocaleTimeString()}</p>
               </div>
             ))}
